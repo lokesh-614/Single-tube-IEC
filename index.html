@@ -231,6 +231,8 @@
             </select>
           </div>
 
+          <p class="text-[11px] text-cyan-400/90 bg-cyan-950/30 border border-cyan-900/60 rounded-md px-2.5 py-2">For OD/ID sweeps, wall thickness is held constant at the baseline value: (OD − ID)/2.</p>
+
           <div class="grid grid-cols-3 gap-2">
             <div>
               <label class="block text-slate-400 font-medium mb-1">Min Val</label>
@@ -787,6 +789,8 @@
 
       const sweepResults = [];
       const stepSize = (maxVal - minVal) / (steps - 1);
+      // Preserve the baseline tube wall thickness for OD and ID parametric studies.
+      const fixedWallThickness_mm = (inputs.OD_mm - inputs.ID_mm) / 2;
 
       for (let i = 0; i < steps; i++) {
         const val = minVal + i * stepSize;
@@ -797,8 +801,14 @@
           case 'l': currentInputs.L_m = val; break;
           case 'tin': currentInputs.Tin = val; break;
           case 'rhin': currentInputs.RHin = val; break;
-          case 'id': currentInputs.ID_mm = val; break;
-          case 'od': currentInputs.OD_mm = val; break;
+          case 'id':
+            currentInputs.ID_mm = val;
+            currentInputs.OD_mm = val + 2 * fixedWallThickness_mm;
+            break;
+          case 'od':
+            currentInputs.OD_mm = val;
+            currentInputs.ID_mm = val - 2 * fixedWallThickness_mm;
+            break;
           case 'k': currentInputs.k_wall = val; break;
         }
 
@@ -1004,12 +1014,16 @@
         }
       });
 
-      // Render constant parameters summary below chart
+      // Render fixed parameters below the chart. For OD/ID sweeps, show wall
+      // thickness as fixed and do not incorrectly label the paired diameter fixed.
       const noteElem = document.getElementById('chart-fixed-params-note');
+      const wallThickness = (baseInputs.OD_mm - baseInputs.ID_mm) / 2;
+      const geometryNote = paramKey === 'od' || paramKey === 'id'
+        ? `<span>Wall thickness (fixed): <span class="text-cyan-300">${wallThickness.toFixed(2)} mm</span></span>`
+        : `<span>OD: <span class="text-slate-200">${baseInputs.OD_mm} mm</span></span><span>ID: <span class="text-slate-200">${baseInputs.ID_mm} mm</span></span>`;
       noteElem.innerHTML = `
         <span><strong class="text-slate-300">Fixed Parameters:</strong></span>
-        <span>OD: <span class="text-slate-200">${baseInputs.OD_mm} mm</span></span>
-        <span>ID: <span class="text-slate-200">${baseInputs.ID_mm} mm</span></span>
+        ${geometryNote}
         <span>k: <span class="text-slate-200">${baseInputs.k_wall} W/m·K</span></span>
         <span>L: <span class="text-slate-200">${baseInputs.L_m} m</span></span>
         <span>Tin: <span class="text-slate-200">${baseInputs.Tin} °C</span></span>
@@ -1056,7 +1070,11 @@
 
       ctx.fillStyle = '#334155';
       ctx.font = '12px Fira Code, monospace';
-      const paramStr = `Fixed Constants: OD=${baseInputs.OD_mm}mm | ID=${baseInputs.ID_mm}mm | k=${baseInputs.k_wall}W/mK | L=${baseInputs.L_m}m | Tin=${baseInputs.Tin}°C | RHin=${baseInputs.RHin}% | V̇=${baseInputs.flow_val}${state.flowUnit}`;
+      const wallThickness = (baseInputs.OD_mm - baseInputs.ID_mm) / 2;
+      const geometryStr = (paramKey === 'od' || paramKey === 'id')
+        ? `Wall thickness=${wallThickness.toFixed(2)}mm (constant)`
+        : `OD=${baseInputs.OD_mm}mm | ID=${baseInputs.ID_mm}mm`;
+      const paramStr = `Fixed Constants: ${geometryStr} | k=${baseInputs.k_wall}W/mK | L=${baseInputs.L_m}m | Tin=${baseInputs.Tin}°C | RHin=${baseInputs.RHin}% | V̇=${baseInputs.flow_val}${state.flowUnit}`;
       ctx.fillText(paramStr, 65, 122);
 
       // Draw standard Chart.js canvas image into center frame
@@ -1188,14 +1206,18 @@
             document.getElementById('param-min').value = 20;
             document.getElementById('param-max').value = 95;
             break;
-          case 'id':
+          case 'id': {
+            const wallThickness = (baseInputs.OD_mm - baseInputs.ID_mm) / 2;
             document.getElementById('param-min').value = 5;
-            document.getElementById('param-max').value = Math.max(6, baseInputs.OD_mm - 1);
+            document.getElementById('param-max').value = Math.max(6, baseInputs.OD_mm - 2 * wallThickness);
             break;
-          case 'od':
-            document.getElementById('param-min').value = baseInputs.ID_mm + 1;
-            document.getElementById('param-max').value = baseInputs.ID_mm + 25;
+          }
+          case 'od': {
+            const wallThickness = (baseInputs.OD_mm - baseInputs.ID_mm) / 2;
+            document.getElementById('param-min').value = baseInputs.ID_mm + 2 * wallThickness;
+            document.getElementById('param-max').value = baseInputs.ID_mm + 2 * wallThickness + 25;
             break;
+          }
           case 'k':
             document.getElementById('param-min').value = 10;
             document.getElementById('param-max').value = 400;
