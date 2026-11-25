@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Single-Tube Psychrometric Heat & Mass Transfer Simulator</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- KaTeX for mathematical formulas rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['Fira Code', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#0284c7',
+              600: '#0369a1',
+              700: '#035485',
+              900: '#0c2e4e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    /* Blueprint hatch pattern for geometry */
+    .bg-grid-pattern {
+      background-size: 20px 20px;
+      background-image: linear-gradient(to right, rgba(226, 232, 240, 0.4) 1px, transparent 1px),
+                        linear-gradient(to bottom, rgba(226, 232, 240, 0.4) 1px, transparent 1px);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- Header Banner -->
+  <header class="bg-slate-950 border-b border-slate-800 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="bg-gradient-to-tr from-cyan-500 to-blue-600 p-2 rounded-lg text-white shadow-lg shadow-cyan-500/20">
+          <i data-lucide="thermometer-snowflake" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-100 tracking-tight flex items-center gap-2">
+            Single-Tube Moist Air Heat & Mass Transfer Lab
+            <span class="text-xs font-mono font-normal px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/50">v2.4 Engineering Suite</span>
+          </h1>
+          <p class="text-xs text-slate-400">Psychrometric Dehumidification • Axial 1D Marching Solver • Parametric Sweeps</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-xs font-mono">
+        <button id="open-formulae-btn" class="bg-cyan-950/90 hover:bg-cyan-900 border border-cyan-700/60 text-cyan-300 font-sans px-3 py-1.5 rounded-lg flex items-center gap-2 transition shadow-sm hover:border-cyan-500">
+          <i data-lucide="book-open" class="w-4 h-4 text-cyan-400"></i>
+          <span class="font-medium">View Formulae</span>
+        </button>
+        <div class="bg-slate-900 border border-slate-800 rounded-md px-3 py-1.5 flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-slate-400">Boundary Condition:</span>
+          <span class="text-cyan-400 font-semibold">T<sub>wall</sub> = WBT<sub>in</sub></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout Grid -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Input Controls & Parametric Configuration (4 cols) -->
+    <div class="lg:col-span-4 space-y-6">
+
+      <!-- Operating & Design Parameters Panel -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-xl pointer-events-none"></div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+            <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i>
+            Tube & Flow Inputs
+          </h2>
+          <button id="reset-defaults-btn" class="text-xs text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-1">
+            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
+          </button>
+        </div>
+
+        <form id="simulation-form" class="space-y-4 text-xs">
+          <!-- Geometry inputs -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Outer Diameter, OD (mm)</label>
+              <div class="relative">
+                <input type="number" id="input-od" step="0.1" min="1" max="500" value="25.4"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">mm</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Inner Diameter, ID (mm)</label>
+              <div class="relative">
+                <input type="number" id="input-id" step="0.1" min="0.5" max="490" value="22.2"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">mm</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Conductivity & Length -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Wall Thermal Cond., k</label>
+              <div class="relative">
+                <input type="number" id="input-k" step="0.1" min="0.01" max="1000" value="385"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">W/m·K</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Tube Length, L (m)</label>
+              <div class="relative">
+                <input type="number" id="input-l" step="0.05" min="0.1" max="100" value="2.0"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">m</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Inlet Psychrometrics -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Inlet Temp, T<sub>in</sub> (°C)</label>
+              <div class="relative">
+                <input type="number" id="input-tin" step="0.5" min="-10" max="80" value="32.0"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">°C</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Inlet RH, RH<sub>in</sub> (%)</label>
+              <div class="relative">
+                <input type="number" id="input-rhin" step="1" min="5" max="100" value="70"
+                  class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+                <span class="absolute right-2.5 top-2 text-slate-500">%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Flow rate with unit conversion -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-slate-400 font-medium">Volumetric Flow Rate, V̇</label>
+              <div class="flex items-center bg-slate-900 border border-slate-800 rounded p-0.5 text-[10px]">
+                <button type="button" id="unit-lpm" class="px-2 py-0.5 rounded bg-cyan-600 text-white font-medium">LPM</button>
+                <button type="button" id="unit-m3h" class="px-2 py-0.5 rounded text-slate-400 hover:text-white">m³/h</button>
+              </div>
+            </div>
+            <div class="relative">
+              <input type="number" id="input-flow" step="1" min="1" max="10000" value="150"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+              <span id="flow-unit-label" class="absolute right-2.5 top-2 text-slate-500">LPM</span>
+            </div>
+            <p id="flow-equivalent-note" class="text-[11px] text-slate-400 mt-1 font-mono">
+              Equivalent: <span id="flow-equiv-val" class="text-cyan-400">9.00 m³/h</span>
+            </p>
+          </div>
+
+          <!-- Ambient pressure -->
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Ambient Pressure, P<sub>atm</sub> (kPa)</label>
+            <input type="number" id="input-patm" step="0.1" value="101.325" readonly
+              class="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-1.5 text-slate-400 font-mono text-xs cursor-not-allowed">
+          </div>
+
+          <!-- Validation Error Banner -->
+          <div id="input-error" class="hidden p-2.5 rounded-lg bg-red-950/80 border border-red-800 text-red-300 text-xs flex items-start gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-red-400 shrink-0 mt-0.5"></i>
+            <span id="error-message">Invalid input geometry parameters.</span>
+          </div>
+        </form>
+      </div>
+
+      <!-- Parametric Analysis Configuration Panel -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-xl">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+            <i data-lucide="line-chart" class="w-4 h-4 text-cyan-400"></i>
+            Parametric Sweep Setup
+          </h2>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-400 font-medium mb-1">Variable Input Parameter</label>
+            <select id="param-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition">
+              <option value="flow">Volumetric Flow Rate (V̇)</option>
+              <option value="l">Tube Length (L)</option>
+              <option value="tin">Inlet Temperature (Tin)</option>
+              <option value="rhin">Inlet Relative Humidity (RHin)</option>
+              <option value="id">Inner Diameter (ID)</option>
+              <option value="od">Outer Diameter (OD)</option>
+              <option value="k">Wall Thermal Cond. (k)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Min Val</label>
+              <input type="number" id="param-min" step="any" value="20"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:border-cyan-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Max Val</label>
+              <input type="number" id="param-max" step="any" value="500"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:border-cyan-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-slate-400 font-medium mb-1">Steps</label>
+              <input type="number" id="param-steps" min="5" max="100" value="30"
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:border-cyan-500 outline-none">
+            </div>
+          </div>
+
+          <button id="run-sweep-btn" class="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-lg shadow-lg shadow-cyan-600/20 flex items-center justify-center gap-2 transition active:scale-[0.98]">
+            <i data-lucide="play" class="w-4 h-4 fill-current"></i> Update Parametric Plots
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Results KPI Cards, Dynamic Geometry Blueprint, Charts (8 cols) -->
+    <div class="lg:col-span-8 space-y-6">
+
+      <!-- KPI Summary Cards Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+        <!-- Outlet Temp Card -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-lg relative overflow-hidden">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Outlet Air Temp</div>
+          <div class="text-2xl font-bold font-mono text-amber-400 flex items-baseline gap-1">
+            <span id="kpi-tout">--</span>
+            <span class="text-sm font-normal text-slate-400">°C</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex justify-between border-t border-slate-800/80 pt-1.5 font-mono">
+            <span>Inlet: <span id="kpi-tin-ref" class="text-slate-300">32.0</span> °C</span>
+            <span id="kpi-temp-drop" class="text-amber-400 font-semibold">-0.0 °C</span>
+          </div>
+        </div>
+
+        <!-- Outlet RH Card -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-lg relative overflow-hidden">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Outlet Rel. Humidity</div>
+          <div class="text-2xl font-bold font-mono text-cyan-400 flex items-baseline gap-1">
+            <span id="kpi-rhout">--</span>
+            <span class="text-sm font-normal text-slate-400">%</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex justify-between border-t border-slate-800/80 pt-1.5 font-mono">
+            <span>Inlet: <span id="kpi-rhin-ref" class="text-slate-300">70</span>%</span>
+            <span id="kpi-rh-status" class="text-cyan-400">Dehumidifying</span>
+          </div>
+        </div>
+
+        <!-- Pressure Drop Card -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-lg relative overflow-hidden">
+          <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pressure Drop</div>
+          <div class="text-2xl font-bold font-mono text-rose-400 flex items-baseline gap-1">
+            <span id="kpi-dp">--</span>
+            <span class="text-sm font-normal text-slate-400">Pa</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex justify-between border-t border-slate-800/80 pt-1.5 font-mono">
+            <span>Vel: <span id="kpi-velocity" class="text-slate-300">0.0</span> m/s</span>
+            <span id="kpi-dp-mmwg" class="text-slate-400">0.0 mmWG</span>
+          </div>
+        </div>
+
+        <!-- Wall Temp / WBT Boundary Card -->
+        <div class="bg-slate-950 border border-cyan-900/60 bg-gradient-to-br from-slate-950 to-cyan-950/20 rounded-xl p-4 shadow-lg relative overflow-hidden">
+          <div class="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span>Wall Temp (T<sub>wall</sub>)</span>
+            <span class="text-[10px] bg-cyan-900/40 text-cyan-300 px-1.5 py-0.5 rounded font-mono">BC: WBT<sub>in</sub></span>
+          </div>
+          <div class="text-2xl font-bold font-mono text-emerald-400 flex items-baseline gap-1">
+            <span id="kpi-twall">--</span>
+            <span class="text-sm font-normal text-slate-400">°C</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex justify-between border-t border-slate-800/80 pt-1.5 font-mono">
+            <span>Re: <span id="kpi-reynolds" class="text-slate-200">--</span></span>
+            <span id="kpi-regime" class="text-emerald-400 font-semibold">Laminar</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Secondary Physics Indicators Toolbar -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between text-xs font-mono text-slate-400 gap-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="flame" class="w-4 h-4 text-amber-400"></i>
+          <span>Heat Transfer Rate (Q̇): <strong id="kpi-q" class="text-amber-300">-- W</strong></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <i data-lucide="droplet" class="w-4 h-4 text-cyan-400"></i>
+          <span>Condensate Rate (ṁ<sub>cond</sub>): <strong id="kpi-condensate" class="text-cyan-300">-- g/h</strong></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <i data-lucide="wind" class="w-4 h-4 text-indigo-400"></i>
+          <span>Inlet Dew Point (T<sub>dp,in</sub>): <strong id="kpi-tdp" class="text-indigo-300">-- °C</strong></span>
+        </div>
+      </div>
+
+      <!-- Parametric Analysis Interactive Plot Container -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 mb-4 gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+              <i data-lucide="trending-up" class="w-4 h-4 text-cyan-400"></i>
+              Parametric Performance Analysis
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Effect of varying parameter on Outlet Air Temperature, Relative Humidity, and Pressure Drop</p>
+          </div>
+
+          <!-- Chart View Mode Tabs & Export Actions -->
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs font-medium">
+              <button id="chart-tab-all" class="px-2.5 py-1 rounded-md bg-cyan-600 text-white shadow">All-in-One</button>
+              <button id="chart-tab-temp" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">T<sub>out</sub></button>
+              <button id="chart-tab-rh" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">RH<sub>out</sub></button>
+              <button id="chart-tab-dp" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-white">ΔP</button>
+            </div>
+
+            <button id="save-plot-png-btn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md transition active:scale-95">
+              <i data-lucide="image" class="w-3.5 h-3.5"></i> Save Plot (PNG)
+            </button>
+            <button id="export-csv-btn" class="px-3 py-1.5 bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Chart Canvas Container -->
+        <div class="relative w-full h-80 bg-slate-900/60 rounded-lg border border-slate-800/80 p-3">
+          <canvas id="parametricChart"></canvas>
+        </div>
+
+        <div id="chart-fixed-params-note" class="mt-3 text-[11px] text-slate-400 font-mono bg-slate-900/80 px-3 py-1.5 rounded border border-slate-800 flex flex-wrap gap-x-4 gap-y-1">
+          <!-- Populated dynamically with constant parameter values -->
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Formulae & Governing Equations Modal -->
+  <div id="formulae-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-cyan-950 border border-cyan-800 rounded-lg text-cyan-400">
+            <i data-lucide="function-square" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-100">Governing Equations & Physics Correlations</h3>
+            <p class="text-xs text-slate-400 font-mono">Single-Tube Psychrometric Finite Volume Heat & Mass Transfer Model</p>
+          </div>
+        </div>
+        <button id="close-formulae-btn" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable Formulae Sections) -->
+      <div class="p-6 overflow-y-auto space-y-6 text-sm text-slate-300">
+        
+        <!-- 1. Boundary & Psychrometrics -->
+        <section class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <h4 class="text-xs font-mono font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span> 1. Psychrometrics & Wet-Bulb Wall Boundary Condition
+          </h4>
+          <p class="text-xs text-slate-400">The outer surface temperature is maintained at $T_{\text{wall}} = WBT_{\text{in}}$. Vapor pressure and wet-bulb temperature are computed using Tetens formulation and Carrier's psychrometric equation:</p>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 font-mono text-xs text-cyan-200 overflow-x-auto space-y-2">
+            <div>$$P_{\text{sat}}(T) = 611.21 \cdot \exp\left(\frac{17.502 \cdot T}{240.97 + T}\right) \quad [\text{Pa}]$$</div>
+            <div>$$\omega(T, RH, P) = 0.62198 \cdot \frac{RH \cdot P_{\text{sat}}(T)}{P - RH \cdot P_{\text{sat}}(T)} \quad [\text{kg}_w/\text{kg}_a]$$</div>
+            <div>$$\omega_{\text{in}} = \frac{(2501 - 2.3263 \cdot WBT)\omega_{\text{sat}}(WBT) - 1.006(T_{\text{in}} - WBT)}{2501 + 1.86 \cdot T_{\text{in}} - 4.186 \cdot WBT}$$</div>
+          </div>
+        </section>
+
+        <!-- 2. Finite Length Heat Transfer Correlations -->
+        <section class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <h4 class="text-xs font-mono font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span> 2. Internal Convection & Finite-Length Developing Flow Corrections
+          </h4>
+          <p class="text-xs text-slate-400">Nusselt numbers ($Nu$) incorporate thermal and hydrodynamic entry-length corrections for both laminar and turbulent regimes:</p>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 font-mono text-xs text-amber-200 overflow-x-auto space-y-3">
+            <div>
+              <strong class="text-slate-400">Laminar Regime ($Re < 2300$) — Hausen Entry-Length Correlation:</strong>
+              $$Gz = \frac{D_i}{L} \cdot Re \cdot Pr, \qquad Nu = 3.66 + \frac{0.0668 \cdot Gz}{1 + 0.04 \cdot Gz^{2/3}}$$
+            </div>
+            <div>
+              <strong class="text-slate-400">Turbulent Regime ($Re \ge 2300$) — Gnielinski with Finite-Length Factor:</strong>
+              $$Nu_{\text{fd}} = \frac{(f_{\text{fd}}/8)(Re - 1000)Pr}{1 + 12.7\sqrt{f_{\text{fd}}/8}\left(Pr^{2/3} - 1\right)}, \qquad C_{\text{entry}} = 1 + \left(\frac{D_i}{L}\right)^{0.7}$$
+              $$Nu = Nu_{\text{fd}} \cdot C_{\text{entry}}$$
+            </div>
+            <div>
+              <strong class="text-slate-400">Convective Heat & Mass Transfer Coefficients:</strong>
+              $$h_i = \frac{Nu \cdot k_{\text{air}}}{D_i}, \qquad h_m = \frac{h_i}{\rho_{\text{air}} c_{p,\text{air}} Le^{2/3}} \quad (Le \approx 0.85)$$
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Pressure Drop Correlations -->
+        <section class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <h4 class="text-xs font-mono font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-rose-400"></span> 3. Fluid Friction & Total Pressure Drop ($\Delta P$)
+          </h4>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 font-mono text-xs text-rose-200 overflow-x-auto space-y-2">
+            <div>
+              $$\text{Laminar: } f = \frac{64}{Re}\left(1 + 0.038 \cdot Gz^{0.75}\right), \qquad \text{Turbulent: } f = \left(0.790 \ln(Re) - 1.64\right)^{-2} \cdot \left[1 + \left(\frac{D_i}{L}\right)^{0.7}\right]$$
+            </div>
+            <div>
+              $$\Delta P = \sum_{j=1}^{N} f \cdot \left(\frac{dx}{D_i}\right) \cdot \frac{\rho_{\text{air}} v^2}{2}$$
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. 1D Marching Energy & Mass Balance -->
+        <section class="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+          <h4 class="text-xs font-mono font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span> 4. 1D Axial Marching Heat & Mass Energy Balance
+          </h4>
+          <p class="text-xs text-slate-400">At each step $dx = L/N$, inner wall temperature $T_{s,i}$ is solved via energy balance across radial conduction resistance $R_{\text{cond}} = \frac{\ln(D_o/D_i)}{2\pi k dx}$:</p>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-200 overflow-x-auto space-y-2">
+            <div>$$Q_{\text{sens}} = h_i \, dA_i \, (T_{\text{air}} - T_{s,i}), \qquad Q_{\text{cond}} = \frac{T_{s,i} - T_{\text{wall}}}{R_{\text{cond}}}$$</div>
+            <div>$$\text{If } T_{s,i} < T_{\text{dp}}: \quad \dot{m}_{\text{cond}} = h_m \, dA_i \, \rho_{\text{air}} (\omega_{\text{air}} - \omega_{\text{sat}}(T_{s,i})), \qquad Q_{\text{lat}} = \dot{m}_{\text{cond}} \cdot h_{fg}$$</div>
+            <div>$$\frac{dT_{\text{air}}}{dx} = -\frac{Q_{\text{sens}}}{\dot{m}_a c_p}, \qquad \frac{d\omega_{\text{air}}}{dx} = -\frac{\dot{m}_{\text{cond}}}{\dot{m}_a}$$</div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <button id="close-formulae-btn-bottom" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition">
+          Close Window
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-slate-950 border-t border-slate-800 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400 font-mono">
+      Single-Tube Psychrometric Heat & Mass Transfer Engineering Tool • ASHRAE / Gnielinski / Petukhov Correlations • 1D Discretized Finite Volume Model
+    </div>
+  </footer>
+
+  <!-- Simulation & UI JavaScript Logic -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // App State Management
+    const state = {
+      flowUnit: 'LPM', // 'LPM' or 'm3h'
+      chartTab: 'all',  // 'all', 'temp', 'rh', 'dp'
+      chartInstance: null,
+      sweepData: []
+    };
+
+    // Psychrometric Calculations Engine
+    class Psychrometrics {
+      // Saturation Vapor Pressure (Pa) over liquid water (ASHRAE / Tetens formulation)
+      static p_sat(T_degC) {
+        return 611.21 * Math.exp((17.502 * T_degC) / (240.97 + T_degC));
+      }
+
+      // Humidity ratio omega (kg_water / kg_dry_air)
+      static omega(T_degC, RH_pct, P_atm_kPa = 101.325) {
+        const P_Pa = P_atm_kPa * 1000;
+        const P_s = this.p_sat(T_degC);
+        const P_v = Math.min((RH_pct / 100) * P_s, P_Pa - 100);
+        return 0.62198 * (P_v / (P_Pa - P_v));
+      }
+
+      // Dew Point Temperature (°C)
+      static dewPoint(T_degC, RH_pct) {
+        const P_s = this.p_sat(T_degC);
+        const P_v = Math.max(1, (RH_pct / 100) * P_s);
+        const a = 17.502;
+        const b = 240.97;
+        const alpha = Math.log(P_v / 611.21);
+        return (b * alpha) / (a - alpha);
+      }
+
+      // Solve Wet Bulb Temperature (°C) using bisection match on psychrometric enthalpy equation
+      static wetBulb(T_degC, RH_pct, P_atm_kPa = 101.325) {
+        const w_in = this.omega(T_degC, RH_pct, P_atm_kPa);
+        const P_Pa = P_atm_kPa * 1000;
+        const T_dp = this.dewPoint(T_degC, RH_pct);
+
+        let low = T_dp - 0.5;
+        let high = T_degC;
+        let wbt = (low + high) / 2;
+
+        for (let iter = 0; iter < 25; iter++) {
+          wbt = (low + high) / 2;
+          const p_s_wbt = this.p_sat(wbt);
+          const w_sat_wbt = 0.62198 * (p_s_wbt / (P_Pa - p_s_wbt));
+          
+          // Carrier psychrometric equation
+          // w = ((2501 - 2.3263*Twb)*w_sat_wbt - 1.006*(T - Twb)) / (2501 + 1.86*T - 4.186*Twb)
+          const num = (2501 - 2.3263 * wbt) * w_sat_wbt - 1.006 * (T_degC - wbt);
+          const den = 2501 + 1.86 * T_degC - 4.186 * wbt;
+          const w_calc = num / den;
+
+          if (w_calc > w_in) {
+            high = wbt;
+          } else {
+            low = wbt;
+          }
+        }
+        return wbt;
+      }
+
+      // Air thermophysical properties as a function of temperature (°C)
+      static airProperties(T_degC, omega_val = 0.01) {
+        const T_k = T_degC + 273.15;
+        const rho = (101325 / (287.058 * T_k)) * (1 / (1 + 1.6078 * omega_val)); // kg/m3
+        const cp = 1006 + 1860 * omega_val; // J/kg.K
+        const mu = 1.81e-5 * Math.pow(T_k / 293.15, 0.7); // Pa.s
+        const k_air = 0.0257 * Math.pow(T_k / 293.15, 0.8); // W/m.K
+        const Pr = (cp * mu) / k_air;
+        return { rho, cp, mu, k_air, Pr };
+      }
+    }
+
+    // 1D Discretized Thermal Fluid Marching Solver
+    function solveSingleTube(inputs) {
+      const { OD_mm, ID_mm, k_wall, L_m, Tin, RHin, flow_val, flow_unit, Patm_kPa = 101.325 } = inputs;
+
+      const OD = OD_mm / 1000;
+      const ID = ID_mm / 1000;
+      const k = k_wall;
+      const L = L_m;
+
+      if (ID >= OD) {
+        throw new Error("Inner Diameter (ID) must be smaller than Outer Diameter (OD).");
+      }
+
+      // Convert flow rate to m3/s
+      let V_dot_m3s = 0;
+      if (flow_unit === 'LPM') {
+        V_dot_m3s = flow_val / 60000;
+      } else {
+        V_dot_m3s = flow_val / 3600;
+      }
+
+      const Ac = (Math.PI / 4) * Math.pow(ID, 2);
+      const vel = V_dot_m3s / Ac;
+
+      // Wet Bulb Temperature boundary condition
+      const WBT_in = Psychrometrics.wetBulb(Tin, RHin, Patm_kPa);
+      const T_wall_outer = WBT_in; // Outer surface maintained at WBT_in
+
+      // Initial psychrometric properties
+      let omega_curr = Psychrometrics.omega(Tin, RHin, Patm_kPa);
+      let T_curr = Tin;
+      const props = Psychrometrics.airProperties(Tin, omega_curr);
+
+      const m_dot_a = props.rho * V_dot_m3s; // dry air mass flow rate kg/s
+      const Re = (props.rho * vel * ID) / props.mu;
+
+      // Hydrodynamic & Thermal Convective Entry Length Corrections
+      let Nu = 3.66;
+      let f = 64 / Re;
+      const Gz = (ID / L) * Re * props.Pr; // Graetz number
+
+      if (Re < 2300) {
+        // Laminar developing flow (Hausen entry correlation)
+        Nu = 3.66 + (0.0668 * Gz) / (1 + 0.04 * Math.pow(Gz, 2/3));
+        f = (64 / Re) * (1 + 0.038 * Math.pow(Gz, 0.75));
+      } else {
+        // Turbulent / Transitional flow (Gnielinski + Finite-Length Entry Correction)
+        const f_fd = Math.pow(0.790 * Math.log(Re) - 1.64, -2);
+        const num = (f_fd / 8) * (Re - 1000) * props.Pr;
+        const den = 1 + 12.7 * Math.sqrt(f_fd / 8) * (Math.pow(props.Pr, 2/3) - 1);
+        const Nu_fd = Math.max(3.66, num / den);
+        
+        // Finite-Length entry correction factor for turbulent flow: C_entry = 1 + (D_i / L)^0.7
+        const C_entry = 1 + Math.pow(ID / L, 0.7);
+        Nu = Nu_fd * C_entry;
+        f = f_fd * C_entry;
+      }
+
+      const h_i = (Nu * props.k_air) / ID; // internal convection coeff W/m2K
+      const Lewis_num = 0.85; // Lewis number for air-water mixture
+      const h_m = h_i / (props.rho * props.cp * Math.pow(Lewis_num, 2/3)); // mass transfer coeff m/s
+
+      // 1D axial discretization setup (N = 60 segments)
+      const N = 60;
+      const dx = L / N;
+      const dA_i = Math.PI * ID * dx;
+
+      // Radial conduction thermal resistance for tube segment
+      const R_cond_segment = Math.log(OD / ID) / (2 * Math.PI * k * dx);
+
+      let total_dP = 0;
+      let total_condensate_kg_s = 0;
+
+      for (let i = 0; i < N; i++) {
+        const T_dp_local = Psychrometrics.dewPoint(T_curr, (Psychrometrics.p_sat(T_curr) > 0) ? (Psychrometrics.p_sat(T_curr) * omega_curr / (0.62198 * Patm_kPa * 1000 + omega_curr * Patm_kPa * 1000)) * 100 : 0);
+
+        // Solve local inner wall surface temperature T_si using bisection
+        // Monotonic energy balance: Q_conv + Q_latent = Q_cond_wall
+        let t_low = T_wall_outer;
+        let t_high = T_curr;
+        let T_si = (t_low + t_high) / 2;
+
+        for (let iter = 0; iter < 15; iter++) {
+          T_si = (t_low + t_high) / 2;
+          const Q_sens_step = h_i * dA_i * (T_curr - T_si);
+
+          let Q_lat_step = 0;
+          if (T_si < T_dp_local) {
+            const omega_sat_si = Psychrometrics.omega(T_si, 100, Patm_kPa);
+            const m_dot_cond_step = Math.max(0, h_m * dA_i * props.rho * (omega_curr - omega_sat_si));
+            const h_fg = 2.44e6; // latent heat of vaporization J/kg
+            Q_lat_step = m_dot_cond_step * h_fg;
+          }
+
+          const Q_in = Q_sens_step + Q_lat_step;
+          const Q_wall = (T_si - T_wall_outer) / R_cond_segment;
+
+          if (Q_in > Q_wall) {
+            t_low = T_si;
+          } else {
+            t_high = T_si;
+          }
+        }
+
+        // Apply final fluxes for step
+        const Q_sens_final = h_i * dA_i * (T_curr - T_si);
+        let m_dot_cond_step = 0;
+        if (T_si < T_dp_local) {
+          const omega_sat_si = Psychrometrics.omega(T_si, 100, Patm_kPa);
+          m_dot_cond_step = Math.max(0, h_m * dA_i * props.rho * (omega_curr - omega_sat_si));
+        }
+
+        total_condensate_kg_s += m_dot_cond_step;
+
+        // Temperature & Humidity Ratio updates along dx
+        const dT = - Q_sens_final / (m_dot_a * props.cp);
+        const d_omega = - m_dot_cond_step / m_dot_a;
+
+        T_curr += dT;
+        omega_curr += d_omega;
+
+        // Enforce physical limits (relative humidity never > 100%)
+        const omega_max_local = Psychrometrics.omega(T_curr, 100, Patm_kPa);
+        if (omega_curr > omega_max_local) {
+          omega_curr = omega_max_local;
+        }
+
+        // Pressure drop step: dp = f * (dx/ID) * (rho * v^2 / 2)
+        const dP_step = f * (dx / ID) * (props.rho * Math.pow(vel, 2) / 2);
+        total_dP += dP_step;
+      }
+
+      const Tout = T_curr;
+      const omega_out = omega_curr;
+      const P_s_out = Psychrometrics.p_sat(Tout);
+      const P_v_out = (omega_out * Patm_kPa * 1000) / (0.62198 + omega_out);
+      const RHout = Math.min(100, Math.max(0, (P_v_out / P_s_out) * 100));
+
+      // Heat transfer calculation
+      const h_in = 1006 * Tin + omega_curr * (2501000 + 1860 * Tin);
+      const h_out = 1006 * Tout + omega_out * (2501000 + 1860 * Tout);
+      const Q_total = m_dot_a * (h_in - h_out); // Watts
+
+      return {
+        Tout: Tout,
+        RHout: RHout,
+        dP: total_dP,
+        WBT_in: WBT_in,
+        velocity: vel,
+        Re: Re,
+        regime: Re < 2300 ? 'Laminar' : (Re < 4000 ? 'Transitional' : 'Turbulent'),
+        Q_watts: Q_total,
+        condensate_g_h: total_condensate_kg_s * 3600 * 1000,
+        inlet_dp: Psychrometrics.dewPoint(Tin, RHin)
+      };
+    }
+
+    // UI Helper Functions
+    function getInputsFromUI() {
+      const OD_mm = parseFloat(document.getElementById('input-od').value);
+      const ID_mm = parseFloat(document.getElementById('input-id').value);
+      const k_wall = parseFloat(document.getElementById('input-k').value);
+      const L_m = parseFloat(document.getElementById('input-l').value);
+      const Tin = parseFloat(document.getElementById('input-tin').value);
+      const RHin = parseFloat(document.getElementById('input-rhin').value);
+      const flow_val = parseFloat(document.getElementById('input-flow').value);
+      const Patm_kPa = parseFloat(document.getElementById('input-patm').value);
+
+      return {
+        OD_mm, ID_mm, k_wall, L_m, Tin, RHin, flow_val, flow_unit: state.flowUnit, Patm_kPa
+      };
+    }
+
+    function updateEquivalentFlowLabel(flow_val) {
+      const equivElem = document.getElementById('flow-equiv-val');
+      if (state.flowUnit === 'LPM') {
+        const m3h = flow_val * 0.06;
+        equivElem.textContent = `${m3h.toFixed(2)} m³/h`;
+      } else {
+        const lpm = flow_val / 0.06;
+        equivElem.textContent = `${lpm.toFixed(1)} LPM`;
+      }
+    }
+
+    function updateOutputsUI(res, inputs) {
+      // Hide error banner
+      document.getElementById('input-error').classList.add('hidden');
+
+      // Update KPI Cards
+      document.getElementById('kpi-tout').textContent = res.Tout.toFixed(2);
+      document.getElementById('kpi-tin-ref').textContent = inputs.Tin.toFixed(1);
+      const dT = res.Tout - inputs.Tin;
+      document.getElementById('kpi-temp-drop').textContent = `${dT.toFixed(2)} °C`;
+
+      document.getElementById('kpi-rhout').textContent = res.RHout.toFixed(1);
+      document.getElementById('kpi-rhin-ref').textContent = inputs.RHin.toFixed(0);
+      document.getElementById('kpi-rh-status').textContent = res.condensate_g_h > 0.1 ? 'Dehumidifying' : 'Sensible Cooling';
+
+      document.getElementById('kpi-dp').textContent = res.dP.toFixed(1);
+      document.getElementById('kpi-velocity').textContent = res.velocity.toFixed(2);
+      const mmWG = res.dP / 9.80665;
+      document.getElementById('kpi-dp-mmwg').textContent = `${mmWG.toFixed(2)} mmWG`;
+
+      document.getElementById('kpi-twall').textContent = res.WBT_in.toFixed(2);
+      document.getElementById('kpi-reynolds').textContent = Math.round(res.Re).toLocaleString();
+      document.getElementById('kpi-regime').textContent = res.regime;
+
+      document.getElementById('kpi-q').textContent = `${res.Q_watts.toFixed(1)} W`;
+      document.getElementById('kpi-condensate').textContent = `${res.condensate_g_h.toFixed(1)} g/h`;
+      document.getElementById('kpi-tdp').textContent = `${res.inlet_dp.toFixed(1)} °C`;
+    }
+
+    function runParametricSweep() {
+      const inputs = getInputsFromUI();
+      const paramKey = document.getElementById('param-select').value;
+      const minVal = parseFloat(document.getElementById('param-min').value);
+      const maxVal = parseFloat(document.getElementById('param-max').value);
+      const steps = parseInt(document.getElementById('param-steps').value);
+
+      if (isNaN(minVal) || isNaN(maxVal) || minVal >= maxVal || steps < 3) {
+        return;
+      }
+
+      const sweepResults = [];
+      const stepSize = (maxVal - minVal) / (steps - 1);
+
+      for (let i = 0; i < steps; i++) {
+        const val = minVal + i * stepSize;
+        const currentInputs = { ...inputs };
+
+        switch (paramKey) {
+          case 'flow': currentInputs.flow_val = val; break;
+          case 'l': currentInputs.L_m = val; break;
+          case 'tin': currentInputs.Tin = val; break;
+          case 'rhin': currentInputs.RHin = val; break;
+          case 'id': currentInputs.ID_mm = val; break;
+          case 'od': currentInputs.OD_mm = val; break;
+          case 'k': currentInputs.k_wall = val; break;
+        }
+
+        try {
+          const res = solveSingleTube(currentInputs);
+          sweepResults.push({
+            paramVal: val,
+            Tout: res.Tout,
+            RHout: res.RHout,
+            dP: res.dP,
+            Q: res.Q_watts,
+            condensate: res.condensate_g_h
+          });
+        } catch (e) {
+          // Skip invalid geometries
+        }
+      }
+
+      state.sweepData = sweepResults;
+      renderChart(sweepResults, paramKey, inputs);
+    }
+
+    function getParamLabel(key) {
+      switch (key) {
+        case 'flow': return `Volumetric Flow Rate (${state.flowUnit})`;
+        case 'l': return 'Tube Length, L (m)';
+        case 'tin': return 'Inlet Temperature, Tin (°C)';
+        case 'rhin': return 'Inlet Relative Humidity, RHin (%)';
+        case 'id': return 'Inner Diameter, ID (mm)';
+        case 'od': return 'Outer Diameter, OD (mm)';
+        case 'k': return 'Wall Thermal Conductivity, k (W/m·K)';
+        default: return key;
+      }
+    }
+
+    function renderChart(data, paramKey, baseInputs) {
+      const ctx = document.getElementById('parametricChart').getContext('2d');
+      const paramLabel = getParamLabel(paramKey);
+
+      // Map dataset points explicitly as {x, y} objects for continuous linear x-axis scaling
+      const toutPoints = data.map(d => ({ x: d.paramVal, y: d.Tout }));
+      const rhPoints = data.map(d => ({ x: d.paramVal, y: d.RHout }));
+      const dpPoints = data.map(d => ({ x: d.paramVal, y: d.dP }));
+
+      if (state.chartInstance) {
+        state.chartInstance.destroy();
+      }
+
+      // Configure datasets based on selected view tab
+      let datasets = [];
+      let yScales = {};
+
+      if (state.chartTab === 'all') {
+        datasets = [
+          {
+            label: 'Outlet Temp (°C)',
+            data: toutPoints,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            yAxisID: 'yTemp',
+            borderWidth: 2.5,
+            tension: 0.3,
+            pointRadius: 2
+          },
+          {
+            label: 'Outlet RH (%)',
+            data: rhPoints,
+            borderColor: '#06b6d4',
+            backgroundColor: 'rgba(6, 182, 212, 0.1)',
+            yAxisID: 'yRH',
+            borderWidth: 2.5,
+            tension: 0.3,
+            pointRadius: 2
+          },
+          {
+            label: 'Pressure Drop (Pa)',
+            data: dpPoints,
+            borderColor: '#f43f5e',
+            backgroundColor: 'rgba(244, 63, 94, 0.1)',
+            yAxisID: 'yDP',
+            borderWidth: 2.5,
+            tension: 0.3,
+            pointRadius: 2
+          }
+        ];
+
+        yScales = {
+          yTemp: {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'Outlet Temp (°C)', color: '#f59e0b', font: { family: 'Fira Code', size: 10 } },
+            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            ticks: { color: '#f59e0b', font: { family: 'Fira Code', size: 10 } }
+          },
+          yRH: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'Outlet RH (%)', color: '#06b6d4', font: { family: 'Fira Code', size: 10 } },
+            grid: { drawOnChartArea: false },
+            ticks: { color: '#06b6d4', font: { family: 'Fira Code', size: 10 } }
+          },
+          yDP: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'Pressure Drop (Pa)', color: '#f43f5e', font: { family: 'Fira Code', size: 10 } },
+            grid: { drawOnChartArea: false },
+            ticks: { color: '#f43f5e', font: { family: 'Fira Code', size: 10 } }
+          }
+        };
+      } else if (state.chartTab === 'temp') {
+        datasets = [{
+          label: 'Outlet Temp (°C)',
+          data: toutPoints,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.15)',
+          fill: true,
+          borderWidth: 3,
+          tension: 0.3,
+          pointRadius: 3
+        }];
+        yScales = {
+          y: {
+            title: { display: true, text: 'Outlet Air Temperature (°C)', color: '#cbd5e1', font: { family: 'Fira Code', size: 11 } },
+            grid: { color: 'rgba(255, 255, 255, 0.08)' },
+            ticks: { color: '#cbd5e1', font: { family: 'Fira Code', size: 10 } }
+          }
+        };
+      } else if (state.chartTab === 'rh') {
+        datasets = [{
+          label: 'Outlet Relative Humidity (%)',
+          data: rhPoints,
+          borderColor: '#06b6d4',
+          backgroundColor: 'rgba(6, 182, 212, 0.15)',
+          fill: true,
+          borderWidth: 3,
+          tension: 0.3,
+          pointRadius: 3
+        }];
+        yScales = {
+          y: {
+            title: { display: true, text: 'Outlet Relative Humidity (%)', color: '#cbd5e1', font: { family: 'Fira Code', size: 11 } },
+            grid: { color: 'rgba(255, 255, 255, 0.08)' },
+            ticks: { color: '#cbd5e1', font: { family: 'Fira Code', size: 10 } }
+          }
+        };
+      } else if (state.chartTab === 'dp') {
+        datasets = [{
+          label: 'Pressure Drop (Pa)',
+          data: dpPoints,
+          borderColor: '#f43f5e',
+          backgroundColor: 'rgba(244, 63, 94, 0.15)',
+          fill: true,
+          borderWidth: 3,
+          tension: 0.3,
+          pointRadius: 3
+        }];
+        yScales = {
+          y: {
+            title: { display: true, text: 'Total Pressure Drop (Pa)', color: '#cbd5e1', font: { family: 'Fira Code', size: 11 } },
+            grid: { color: 'rgba(255, 255, 255, 0.08)' },
+            ticks: { color: '#cbd5e1', font: { family: 'Fira Code', size: 10 } }
+          }
+        };
+      }
+
+      state.chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#e2e8f0', font: { family: 'Inter', size: 11 } }
+            },
+            tooltip: {
+              backgroundColor: '#0f172a',
+              titleColor: '#38bdf8',
+              bodyFont: { family: 'Fira Code', size: 11 },
+              borderColor: '#334155',
+              borderWidth: 1,
+              callbacks: {
+                title: function(context) {
+                  if (context.length > 0) {
+                    const xVal = context[0].parsed.x;
+                    return `${paramLabel}: ${xVal.toFixed(2)}`;
+                  }
+                  return '';
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              title: { display: true, text: paramLabel, color: '#cbd5e1', font: { family: 'Inter', size: 11 } },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { family: 'Fira Code', size: 10 } }
+            },
+            ...yScales
+          }
+        }
+      });
+
+      // Render constant parameters summary below chart
+      const noteElem = document.getElementById('chart-fixed-params-note');
+      noteElem.innerHTML = `
+        <span><strong class="text-slate-300">Fixed Parameters:</strong></span>
+        <span>OD: <span class="text-slate-200">${baseInputs.OD_mm} mm</span></span>
+        <span>ID: <span class="text-slate-200">${baseInputs.ID_mm} mm</span></span>
+        <span>k: <span class="text-slate-200">${baseInputs.k_wall} W/m·K</span></span>
+        <span>L: <span class="text-slate-200">${baseInputs.L_m} m</span></span>
+        <span>Tin: <span class="text-slate-200">${baseInputs.Tin} °C</span></span>
+        <span>RHin: <span class="text-slate-200">${baseInputs.RHin}%</span></span>
+        <span>V̇: <span class="text-slate-200">${baseInputs.flow_val} ${state.flowUnit}</span></span>
+      `;
+    }
+
+    // High-Resolution Publication-Ready Plot PNG Exporter
+    function savePlotAsPNG() {
+      if (!state.sweepData || state.sweepData.length === 0) return;
+
+      const baseInputs = getInputsFromUI();
+      const paramKey = document.getElementById('param-select').value;
+      const paramLabel = getParamLabel(paramKey);
+
+      // Create an offscreen high-DPI canvas
+      const exportCanvas = document.createElement('canvas');
+      const width = 1400;
+      const height = 900;
+      exportCanvas.width = width;
+      exportCanvas.height = height;
+      const ctx = exportCanvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      // Header Title & Subtitle
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 26px Inter, sans-serif';
+      ctx.fillText('Single-Tube Psychrometric Simulation - Parametric Analysis', 50, 50);
+
+      ctx.fillStyle = '#475569';
+      ctx.font = '14px Fira Code, monospace';
+      ctx.fillText(`Varied Parameter: ${paramLabel} | Boundary Condition: T_wall = WBT_in`, 50, 78);
+
+      // Box for Fixed Operating Parameters
+      ctx.fillStyle = '#f8fafc';
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.fillRect(50, 95, width - 100, 45);
+      ctx.strokeRect(50, 95, width - 100, 45);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = '12px Fira Code, monospace';
+      const paramStr = `Fixed Constants: OD=${baseInputs.OD_mm}mm | ID=${baseInputs.ID_mm}mm | k=${baseInputs.k_wall}W/mK | L=${baseInputs.L_m}m | Tin=${baseInputs.Tin}°C | RHin=${baseInputs.RHin}% | V̇=${baseInputs.flow_val}${state.flowUnit}`;
+      ctx.fillText(paramStr, 65, 122);
+
+      // Draw standard Chart.js canvas image into center frame
+      const chartCanvas = document.getElementById('parametricChart');
+      ctx.drawImage(chartCanvas, 50, 160, width - 100, height - 220);
+
+      // Footer stamp
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('Generated via Single-Tube Psychrometric Heat & Mass Transfer Engineering Suite', 50, height - 25);
+
+      // Trigger download
+      const imageURI = exportCanvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `parametric_analysis_${paramKey}.png`;
+      link.href = imageURI;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // CSV Export functionality
+    function exportCSV() {
+      if (!state.sweepData || state.sweepData.length === 0) return;
+
+      const paramKey = document.getElementById('param-select').value;
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += `${paramKey},Outlet_Temp_degC,Outlet_RH_pct,Pressure_Drop_Pa,Heat_Transfer_W,Condensate_g_h\n`;
+
+      state.sweepData.forEach(row => {
+        csvContent += `${row.paramVal.toFixed(4)},${row.Tout.toFixed(4)},${row.RHout.toFixed(4)},${row.dP.toFixed(4)},${row.Q.toFixed(4)},${row.condensate.toFixed(4)}\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `parametric_data_${paramKey}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Event Listeners Setup
+    function setupEvents() {
+      const inputsList = ['input-od', 'input-id', 'input-k', 'input-l', 'input-tin', 'input-rhin', 'input-flow'];
+      
+      const triggerRecalculate = () => {
+        const inputs = getInputsFromUI();
+        updateEquivalentFlowLabel(inputs.flow_val);
+
+        if (inputs.ID_mm >= inputs.OD_mm) {
+          const errElem = document.getElementById('input-error');
+          document.getElementById('error-message').textContent = 'Inner Diameter (ID) must be strictly less than Outer Diameter (OD).';
+          errElem.classList.remove('hidden');
+          return;
+        }
+
+        try {
+          const res = solveSingleTube(inputs);
+          updateOutputsUI(res, inputs);
+          runParametricSweep();
+        } catch (err) {
+          const errElem = document.getElementById('input-error');
+          document.getElementById('error-message').textContent = err.message;
+          errElem.classList.remove('hidden');
+        }
+      };
+
+      inputsList.forEach(id => {
+        document.getElementById(id).addEventListener('input', triggerRecalculate);
+      });
+
+      // Unit Toggles
+      document.getElementById('unit-lpm').addEventListener('click', () => {
+        if (state.flowUnit === 'LPM') return;
+        state.flowUnit = 'LPM';
+        document.getElementById('unit-lpm').className = 'px-2 py-0.5 rounded bg-cyan-600 text-white font-medium';
+        document.getElementById('unit-m3h').className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+        document.getElementById('flow-unit-label').textContent = 'LPM';
+        
+        // Convert current numerical value
+        const currentVal = parseFloat(document.getElementById('input-flow').value);
+        const newVal = Math.round(currentVal / 0.06);
+        document.getElementById('input-flow').value = newVal;
+
+        // Update default sweep range for flow
+        document.getElementById('param-min').value = 20;
+        document.getElementById('param-max').value = 500;
+
+        triggerRecalculate();
+      });
+
+      document.getElementById('unit-m3h').addEventListener('click', () => {
+        if (state.flowUnit === 'm3h') return;
+        state.flowUnit = 'm3h';
+        document.getElementById('unit-m3h').className = 'px-2 py-0.5 rounded bg-cyan-600 text-white font-medium';
+        document.getElementById('unit-lpm').className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+        document.getElementById('flow-unit-label').textContent = 'm³/h';
+        
+        const currentVal = parseFloat(document.getElementById('input-flow').value);
+        const newVal = (currentVal * 0.06).toFixed(2);
+        document.getElementById('input-flow').value = newVal;
+
+        document.getElementById('param-min').value = 1;
+        document.getElementById('param-max').value = 30;
+
+        triggerRecalculate();
+      });
+
+      // Default Sweep Ranges update on variable parameter select
+      document.getElementById('param-select').addEventListener('change', (e) => {
+        const key = e.target.value;
+        const baseInputs = getInputsFromUI();
+
+        switch (key) {
+          case 'flow':
+            document.getElementById('param-min').value = state.flowUnit === 'LPM' ? 20 : 1;
+            document.getElementById('param-max').value = state.flowUnit === 'LPM' ? 500 : 30;
+            break;
+          case 'l':
+            document.getElementById('param-min').value = 0.5;
+            document.getElementById('param-max').value = 5.0;
+            break;
+          case 'tin':
+            document.getElementById('param-min').value = 20;
+            document.getElementById('param-max').value = 50;
+            break;
+          case 'rhin':
+            document.getElementById('param-min').value = 20;
+            document.getElementById('param-max').value = 95;
+            break;
+          case 'id':
+            document.getElementById('param-min').value = 5;
+            document.getElementById('param-max').value = Math.max(6, baseInputs.OD_mm - 1);
+            break;
+          case 'od':
+            document.getElementById('param-min').value = baseInputs.ID_mm + 1;
+            document.getElementById('param-max').value = baseInputs.ID_mm + 25;
+            break;
+          case 'k':
+            document.getElementById('param-min').value = 10;
+            document.getElementById('param-max').value = 400;
+            break;
+        }
+
+        runParametricSweep();
+      });
+
+      document.getElementById('run-sweep-btn').addEventListener('click', runParametricSweep);
+
+      // Chart Tabs switching
+      const tabIds = ['all', 'temp', 'rh', 'dp'];
+      tabIds.forEach(tab => {
+        document.getElementById(`chart-tab-${tab}`).addEventListener('click', () => {
+          state.chartTab = tab;
+          tabIds.forEach(t => {
+            const btn = document.getElementById(`chart-tab-${t}`);
+            if (t === tab) {
+              btn.className = 'px-2.5 py-1 rounded-md bg-cyan-600 text-white shadow font-semibold';
+            } else {
+              btn.className = 'px-2.5 py-1 rounded-md text-slate-400 hover:text-white';
+            }
+          });
+          const inputs = getInputsFromUI();
+          renderChart(state.sweepData, document.getElementById('param-select').value, inputs);
+        });
+      });
+
+      // Actions
+      document.getElementById('save-plot-png-btn').addEventListener('click', savePlotAsPNG);
+      document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
+
+      // Formulae Modal Handlers
+      const modal = document.getElementById('formulae-modal');
+      const openModal = () => {
+        modal.classList.remove('hidden');
+        if (window.renderMathInElement) {
+          renderMathInElement(modal, {
+            delimiters: [
+              {left: '$$', right: '$$', display: true},
+              {left: '$', right: '$', display: false}
+            ],
+            throwOnError: false
+          });
+        }
+      };
+      const closeModal = () => modal.classList.add('hidden');
+
+      document.getElementById('open-formulae-btn').addEventListener('click', openModal);
+      document.getElementById('close-formulae-btn').addEventListener('click', closeModal);
+      document.getElementById('close-formulae-btn-bottom').addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+
+      document.getElementById('reset-defaults-btn').addEventListener('click', () => {
+        document.getElementById('input-od').value = 25.4;
+        document.getElementById('input-id').value = 22.2;
+        document.getElementById('input-k').value = 385;
+        document.getElementById('input-l').value = 2.0;
+        document.getElementById('input-tin').value = 32.0;
+        document.getElementById('input-rhin').value = 70;
+        document.getElementById('input-flow').value = 150;
+        triggerRecalculate();
+      });
+    }
+
+    // Initialize application on window load
+    window.onload = function() {
+      setupEvents();
+      const initialInputs = getInputsFromUI();
+      const initialRes = solveSingleTube(initialInputs);
+      updateOutputsUI(initialRes, initialInputs);
+      runParametricSweep();
+    };
+  </script>
+</body>
+</html>
